@@ -26,13 +26,8 @@ from shapely.geometry import GeometryCollection, LineString, MultiLineString, Mu
 from shapely.ops import split
 from shapely.strtree import STRtree
 
-try:
-    import contextily as cx
-except Exception as exc:  # optional: a broken tile/GDAL stack must not stop routing
-    cx = None
-    _CONTEXTILY_IMPORT_ERROR = exc
-else:
-    _CONTEXTILY_IMPORT_ERROR = None
+# map_style_cr imports contextily optionally: a broken tile stack must not stop routing.
+from .map_style_cr import style_cr_map
 
 
 AADT_COLUMNS = ["T9", "T10", "T11", "T12", "T13", "T14", "T15"]
@@ -119,24 +114,6 @@ def _read_vector(path: Path, layer: str | None = None) -> gpd.GeoDataFrame:
     if layer is not None:
         kwargs["layer"] = layer
     return gpd.read_file(path, **kwargs)
-
-
-def _safe_add_basemap(ax, crs: Any, enabled: bool = True) -> None:
-    if not enabled:
-        return
-    if cx is None:
-        print(f"Basemap skipped: contextily unavailable ({_CONTEXTILY_IMPORT_ERROR})")
-        return
-    try:
-        cx.add_basemap(
-            ax=ax,
-            crs=crs,
-            source=cx.providers.CartoDB.Positron,
-            alpha=0.40,
-            attribution=False,
-        )
-    except Exception as exc:
-        print(f"Basemap skipped: tiles unavailable ({exc})")
 
 
 def _finite_numeric(series: pd.Series) -> pd.Series:
@@ -751,15 +728,14 @@ def plot_aadt_maps(
                     alpha=0.78,
                 )
             )
-        _safe_add_basemap(ax, physical.crs, enabled=config.add_basemap)
-        ax.legend(
-            handles=legend_handles,
-            title=f"{title} AADT\n(vehicles/day)",
-            loc="upper right",
-            frameon=True,
+        style_cr_map(
+            ax,
+            physical.crs,
+            basemap=config.add_basemap,
+            legend_handles=legend_handles,
+            legend_title=f"{title} AADT\n(vehicles/day)",
         )
         ax.set_title(f"{title} — Annual Average Daily Traffic", fontweight="bold")
-        ax.axis("off")
         fig.tight_layout()
         fig.savefig(
             config.figure_path / f"{field}_aadt_map.png",
@@ -801,26 +777,16 @@ def plot_aadt_maps(
                     alpha=0.78,
                 )
             )
-        _safe_add_basemap(ax, physical.crs, enabled=config.add_basemap)
-        ax.legend(
-            handles=handles,
-            title=f"{title}\n(vehicles/day)",
-            loc="upper right",
-            fontsize=9,
-            title_fontsize=10,
-            frameon=True,
+        style_cr_map(
+            ax,
+            physical.crs,
+            basemap=config.add_basemap,
+            legend_handles=handles,
+            legend_title=f"{title}\n(vehicles/day)",
+            legend_kw={"fontsize": 9, "title_fontsize": 10},
+            panel_label=letters[panel_index],
+            city_fontsize=8,
         )
-        ax.text(
-            0.03,
-            0.97,
-            letters[panel_index],
-            transform=ax.transAxes,
-            va="top",
-            fontsize=18,
-            fontweight="bold",
-            bbox={"boxstyle": "round,pad=0.25", "facecolor": "white", "alpha": 0.8},
-        )
-        ax.axis("off")
     axes_flat[-1].axis("off")
     fig.suptitle("AADT Categories — Modified Cantonal Network", fontsize=18, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.985))
@@ -876,17 +842,17 @@ def plot_direction_qa(
                 },
                 zorder=4,
             )
-    _safe_add_basemap(ax, plot_frame.crs, enabled=config.add_basemap)
-    ax.legend(
-        handles=[
+    style_cr_map(
+        ax,
+        plot_frame.crs,
+        basemap=config.add_basemap,
+        legend_handles=[
             Line2D([0], [0], color="#CFCFCF", lw=2, label="Bidirectional / assumed bidirectional"),
             Line2D([0], [0], color="#B2182B", lw=2, label="Unidirectional (digitized direction)"),
         ],
-        loc="upper right",
-        title="Direction QA",
+        legend_title="Direction QA",
     )
     ax.set_title("One-way Direction QA — Modified Cantonal Network", fontweight="bold")
-    ax.axis("off")
     fig.tight_layout()
     output = config.figure_path / "oneway_direction_qa.png"
     fig.savefig(output, dpi=config.figure_dpi, bbox_inches="tight")
@@ -1115,17 +1081,17 @@ def plot_giant_component_diagnostics(
         base.loc[base["physical_edge_id"].isin(dropped_ids)].plot(
             ax=ax, color="#D73027", linewidth=1.5, alpha=0.95, zorder=3
         )
-    _safe_add_basemap(ax, base.crs, enabled=config.add_basemap)
-    ax.legend(
-        handles=[
+    style_cr_map(
+        ax,
+        base.crs,
+        basemap=config.add_basemap,
+        legend_handles=[
             Line2D([0], [0], color="#777777", lw=2, label="Included"),
             Line2D([0], [0], color="#D73027", lw=2, label="Dropped"),
         ],
-        title="Strong giant component",
-        loc="upper right",
+        legend_title="Strong giant component",
     )
     ax.set_title("Strong Giant Component — Included and Dropped Roads", fontweight="bold")
-    ax.axis("off")
     fig.tight_layout()
     output = config.figure_path / "giant_component_dropped_roads.png"
     fig.savefig(output, dpi=config.figure_dpi, bbox_inches="tight")

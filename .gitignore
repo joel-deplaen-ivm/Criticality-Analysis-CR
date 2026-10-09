@@ -106,3 +106,6 @@ ArcGIS_deliverable/layer_inventory.md
 ArcGIS_notebooks/BlueSpot_hazard.aprx
 ArcGIS_notebooks/BlueSpot_hazard.aprx.xml
 ArcGIS_notebooks/.backups/BlueSpot_hazard.aprx.tmp
+
+# Local CARTO basemap API key (read by src/map_style_cr.py)
+.carto_api_key

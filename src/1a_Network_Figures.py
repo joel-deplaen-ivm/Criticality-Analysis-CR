@@ -58,6 +58,12 @@ warnings.simplefilter(action="ignore", category=RuntimeWarning)
 from config.network_config import NetworkConfig
 
 
+CARTO_BASEMAP_API_KEY = "cb1_2bgr_1_3c5ccfbb7c860fcdcee9b0d4"
+CARTO_POSITRON = cx.providers.CartoDB.Positron.copy()
+CARTO_POSITRON["url"] = f"{CARTO_POSITRON['url']}?key={CARTO_BASEMAP_API_KEY}"
+CARTO_ATTRIBUTION = CARTO_POSITRON.get("attribution", "")
+
+
 # Project root (repository root, one level above this src folder)
 PROJECT_ROOT = (
     Path(__file__).resolve().parents[1]
@@ -362,9 +368,9 @@ def plot_osm_network(
     # Add basemap
     cx.add_basemap(
         ax=ax,
-        source=cx.providers.CartoDB.Positron,
+        source=CARTO_POSITRON,
         alpha=config.basemap_alpha,
-        attribution=False,
+        attribution=CARTO_ATTRIBUTION,
     )
 
     # Styling
@@ -458,9 +464,9 @@ def plot_serbian_network(gdf: gpd.GeoDataFrame, config: LocalConfig) -> None:
     # Add basemap
     cx.add_basemap(
         ax=ax,
-        source=cx.providers.CartoDB.Positron,
+        source=CARTO_POSITRON,
         alpha=config.basemap_alpha,
-        attribution=False,
+        attribution=CARTO_ATTRIBUTION,
     )
 
     # Styling
@@ -533,9 +539,9 @@ def plot_network_comparison(
 
     cx.add_basemap(
         ax=ax1,
-        source=cx.providers.CartoDB.Positron,
+        source=CARTO_POSITRON,
         alpha=config.basemap_alpha,
-        attribution=False,
+        attribution=CARTO_ATTRIBUTION,
     )
     ax1.set_aspect("equal")
     ax1.axis("off")
@@ -590,9 +596,9 @@ def plot_network_comparison(
 
     cx.add_basemap(
         ax=ax2,
-        source=cx.providers.CartoDB.Positron,
+        source=CARTO_POSITRON,
         alpha=config.basemap_alpha,
-        attribution=False,
+        attribution=CARTO_ATTRIBUTION,
     )
     ax2.set_aspect("equal")
     ax2.axis("off")
