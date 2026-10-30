@@ -1154,13 +1154,15 @@ def save_outputs(
     giant_stats: dict[str, Any],
     config: CRNetworkPrepConfig,
     show: bool = True,
+    make_figures: bool = True,
 ) -> pd.DataFrame:
     """Save diagnostics first, enforce the 95% rule, then save/re-open output."""
 
     config.ensure_output_dirs()
-    plot_giant_component_diagnostics(
-        directed_edges, giant_edges, dropped_edges, config, show=show
-    )
+    if make_figures:
+        plot_giant_component_diagnostics(
+            directed_edges, giant_edges, dropped_edges, config, show=show
+        )
     _write_geopackage(
         dropped_edges,
         config.dropped_roads_path,

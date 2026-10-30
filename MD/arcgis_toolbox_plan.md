@@ -91,7 +91,6 @@ arcgis_toolbox/
   T3_baseline_accessibility.py
   T4_hazard_exposure.py
   T5_flood_scenario_accessibility.py
-  T6_combined_criticality.py
   cr_common.py                 # ensure_field, find_field, split_paths, create_consolidated_copy,
                                # sample_raster_to_points, graph build, OD/gravity, norm helpers
   CR_Criticality.gdb/          # created at runtime (not in git)
@@ -121,52 +120,101 @@ the `.py` files, never in the toolbox.
 
 Nothing in §6 has been run. Parity thresholds above are proposals, not measured.
 
-## 7. Decisions
-
-**Resolved (user, 2026-10-30: "defaults fine"):** scope as in §2 with 2b as an option inside T2;
-3d hospital + EBAIS as one tool with a facility parameter; cloned Pro env with `python-igraph`;
-CHIRPS GEV/Theil–Sen rasters are pre-computed inputs; ArcGIS-native geometry cleaning (edge-count
-tolerance documented); toolbox lives in this repo under `arcgis_toolbox/`. The list below is the
-original question set, kept for the record.
-
 ### Original questions
 
 1. **Scope.** Is the chain in §2 right? In particular: include 2b (socio-economic quintiles) as
-   an option inside T2, as a separate tool, or leave out? Port both 3d variants (hospital, EBAIS)
-   as one tool with a facility parameter (my default)?
+   an option inside T2, as a separate tool, or leave out? Seperate tool
+   Port both 3d variants (hospital, EBAIS)as one tool with a facility parameter (my default)? Yes, seperate tool
 2. **Environment.** Is installing `python-igraph` into a cloned Pro env acceptable for the
    people who will run this (Costa Rican partners?), or must the toolbox run on a stock Pro
-   install? That decides igraph vs. a scipy rewrite.
+   install? That decides igraph vs. a scipy rewrite.: clone version with library installed on top
 3. **CHIRPS Rx1month GEV/Theil–Sen** (4a): the notebook derives return levels with L-moments.
    Port to the toolbox (numpy/scipy), or treat the derived rasters as pre-computed inputs?
-   Default proposed: **pre-computed input**, to keep T4 raster-in / table-out.
+   Default proposed: **pre-computed input**, to keep T4 raster-in / table-out.: only riverine flood implementation for now
 4. **Reproducibility vs. ArcGIS-native.** Rewrite the 1b geometry cleaning with ArcGIS tools
    (different snapping results, likely a few edges differ) or port the shapely logic to numpy
    to keep results identical? Default proposed: ArcGIS-native, with a documented tolerance on
-   the edge count.
+   the edge count: no use the library used in the nb
 5. **Audience/placement.** Does the toolbox live in this repo (my default, `arcgis_toolbox/`) or
-   next to BSA2 in the BlueSpot CR project folder?
+   next to BSA2 in the BlueSpot CR project folder? In this repo for now
 
 ### User Decision
 
-## 1.2: avoid arcpy stdlib, keep the original library initially, geopandas and numpy can be added on the cloned environment
+1.2: avoid arcpy stdlib, keep the original library initially, geopandas and numpy can be added on the cloned environment
 
-## 1.5 keep sampling strategies of notebook
+1.5: keep sampling strategies of notebook
 
-## 2: only do the flood hazard, leave the landslide and rainfall for now
+2: only do the flood hazard, leave the landslide and rainfall for now
 
-## T4 Hazard Exposure: flood only
+T4: Hazard Exposure: flood only
 
-## 3 igraph will be added to the clones arcpy environment
+3: igraph will be added to the clones arcpy environment
 
-## 4.1 keep geopandas
+4.1: keep geopandas
 
-## 4.2 keep shapely
+4.2: keep shapely
 
-## 4.3 keep original nearest node snapping
+4.3: keep original nearest node snapping
 
-## Make list of input and assumptions required to run notebook
+Make list of input and assumptions required to run notebook
 
-## check the nb cells that are not used atm
+Implement plan for notebooke 1b and 2
 
-## show overlap of functions in BSA2.py and the notebook
+### Notes
+
+1. check the nb cells that are not used atm
+
+2. show overlap of functions in BSA2.py and the notebook
+## 8. Revision after the user decisions (supersedes §1.2, §3, §4 and §6 where they conflict)
+
+**Decisions applied:** keep the notebook libraries (geopandas, shapely, numpy, pandas, scipy,
+igraph) in a cloned Pro env; keep the notebook sampling and nearest-node strategies; scope of
+this round = **T1 (1b) and T2 (2)** only; hazard work (T4) is **flood only** — landslide and
+rainfall are dropped for now (so also no CHIRPS GEV / Theil–Sen); 2b, 3d-hospital and 3d-EBAIS
+are separate tools; toolbox lives in this repo.
+
+What changes in the plan:
+
+| Earlier plan | Now |
+|---|---|
+| §1.2 / §4.1–4.3: arcpy + numpy only, geopandas → arcpy port, Integrate/FeatureToLine, KD-tree | **No port.** `arcpy` is used only for messages, progress, parameters and layer-name → path resolution; everything else is the notebook code. Outside ArcGIS the same scripts run with `--options`, which is how they were tested here |
+| §4.2 largest rewrite (1b geometry) | Gone: T1 imports `src/network_preparation_cr.py`. One backward-compatible edit to it: `save_outputs(..., make_figures=True)` so the tool can skip the map |
+| §3 fallback to scipy Dijkstra | Dropped; igraph is in the cloned env |
+| §3 cache as `.npy`/`.npz` | CSV in `<output>/cache/`, keyed by a hash of the inputs (parquet/pyarrow not assumed in the Pro env) |
+| §1.7 outputs in `CR_Criticality.gdb`, timestamped feature classes | Timestamped **run folder** per tool containing GeoPackages with the notebook's file and layer names (CR convention; keeps downstream notebooks readable). File-geodatabase export is a possible later option |
+| §5 T6 combined tool, T4 with three hazards | T4 flood only; T5/T6 not started |
+
+### Built so far (`arcgis_toolbox/`)
+
+| File | Role | Maps to |
+|---|---|---|
+| `cr_common.py` | arcpy shim (`msg`, `warn`, `read_parameters`, `Progress`), vector IO with `gdb`/`gpkg` layer notation, run-config `.loc`, graph + gravity helpers | BSA2 utilities |
+| `T1_prepare_network.py` | wraps the 1b stages | notebook 1b |
+| `T2_spof_criticality.py` | notebook 2 §2–7 and §9 as functions + `main()` | notebook 2 |
+
+Inputs and assumptions: `MD/arcgis_toolbox_inputs_assumptions.md`. The `.atbx` itself still has to
+be created in ArcGIS Pro (Add script tool → point at the `.py`, parameters in the order given in
+each file's docstring). **Not done, not verified:** running inside ArcGIS Pro, the `.atbx`, and the
+`SetParameterAsText` derived-output paths (`<file>.gpkg\<layer>` form).
+
+### Note 1 — notebook cells not used by the tools
+
+| Notebook | Cells not ported | Reason |
+|---|---|---|
+| 1b | 12 (`plot_aadt_maps`), 14's `plot_direction_qa` call, the figure part of `save_outputs` | Figures only. Every other code cell is a stage the tool runs (its `display()` calls are dropped) |
+| 2 | 18 (demand heatmap), 21 (single-iteration timing probe), 26 + 28 + 29 + 33–37 (class breaks, maps, plots), 30–32 (save/reload of `physical_results` — replaced by the tool's cache), 40 (re-open check; its assertions and manifest are **commented out** in the notebook), 42–48 (summary statistics, regression, modelled-vs-observed AADT, quasi-quintiles) | Figures / diagnostics |
+| 2 | 49–end ("Socio eco": IDS quintile plot) | Belongs to the later 2b tool |
+| 2 | 32 reads `criticality_results_path` **before** cell 39 writes it in the same session, so it depends on a file from a previous run | Latent notebook issue; the tool has no such dependency |
+
+### Note 2 — overlap of BSA2.py functions with the notebooks
+
+| BSA2.py | CR notebook / src counterpart | Overlap |
+|---|---|---|
+| `main()` parameter block, `GetParameterAsText`, `SetParameterAsText`, `AddMessage`, timestamped output, `Loc/run_config_*.loc` | none (notebooks have constants in cells) | Reproduced in `cr_common.py` |
+| `split_paths`, `create_consolidated_copy`, `ensure_field`, `find_field` | `read_vector`/`write_gpkg` in `cr_common.py`; `_read_vector`, `_write_geopackage` in `src` | Same role, geopandas instead of arcpy |
+| `get_endpoints` (rounded endpoint node keys) | 1b `snap_network_iteratively` / `build_topology` (tolerance snapping, integer `from_id`/`to_id`) | Same idea, 1b is far more thorough |
+| `dijkstra` (per-edge detour with `skip_oid`) + `road_loss_analysis` (dead-end → OCU × GDP/day, else COV × detour km × AADT) | notebook 2 percolation + `SummariseOD` + VHL/PHL… | **Conceptual overlap, different metric**: BSA2 = detour of the removed edge's own endpoints, in money; CR = demand-weighted OD delay across all population pairs, in hours/km, isolation penalty instead of OCU × GDP |
+| `read_taxonomy_csv` (COV, OCU per T9–T15) | `PASSENGER_FACTORS`, `FREIGHT_FACTORS` | Both map T9–T15 to per-vehicle weights; different quantities |
+| `sample_raster_to_points`, `add_raster_field`, `liquefaction_once` | notebook 4a raster sampling onto edges | Same job; **4a's sampling method has not been read or compared yet** — check before T4 |
+| `road_geometry` (points every N m, tributary length) | none | CR 4a does not use tributary-length integration |
+| `read_vul_db`, `build_vul_key`, `process_roads/components`, `compute_DAE/PAE`, `apply_TRmods`, `compute_mod_totals`, bridge/tunnel/drainage components | none (5a/5b state explicitly "not risk": no fragility, no loss, no climate change) | No CR counterpart; out of scope |
