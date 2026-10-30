@@ -9,7 +9,8 @@ data layers are drawn. It applies the same frame and furniture to every figure:
 * the national outline;
 * the three reference cities San José, Liberia and Limón;
 * the legend in the lower left, in one frame style;
-* the Aptos font for every figure that imports this module (when installed).
+* one set of font sizes (below) for legends, city labels, panel labels and the matplotlib
+  defaults, identical on every map whatever the figure size; the Aptos font when installed.
 
 The helpers work in any CRS the notebooks draw in: 3857 (basemap-native),
 8908 (CRTM05, the CR working CRS) and 4326 (the hazard rasters in 4a). Tiles
@@ -87,15 +88,20 @@ MAIN_CITIES = {
     "Limón": {"offset": (-6, 4), "ha": "right"},
 }
 
-# Legend font sizes are for a map LEGEND_REF_WIDTH_IN wide (a single 12 x 10 in figure).
-# On narrower maps they shrink in proportion, down to LEGEND_MIN_SCALE, so the legend
-# takes the same share of every map instead of covering the north-east of the country.
-LEGEND_REF_WIDTH_IN = 9.3
-LEGEND_MIN_SCALE = 0.7
+# One font size per text role, in points, the same on every map. The size arguments some
+# notebooks still pass (legend_kw fontsize/title_fontsize, city_fontsize) are ignored.
+BASE_FONTSIZE = 12             # axis labels, ticks, anything without an explicit size
+TITLE_FONTSIZE = 15            # matplotlib default for ax.set_title (explicit sizes still win)
+LEGEND_FONTSIZE = 15
+LEGEND_TITLE_FONTSIZE = 15
+CITY_FONTSIZE = 12
+CITY_LABEL_ALPHA = 0.9
+PANEL_LABEL_FONTSIZE = 20
+
 LEGEND_KW = dict(
     loc="lower left",
-    fontsize=15,
-    title_fontsize=15,
+    fontsize=LEGEND_FONTSIZE,
+    title_fontsize=LEGEND_TITLE_FONTSIZE,
     frameon=True,
     fancybox=True,
     shadow=True,
@@ -142,6 +148,14 @@ if any(f.name == FONT_FAMILY for f in fm.fontManager.ttflist):
 else:
     warnings.warn(f"Font '{FONT_FAMILY}' not installed; using matplotlib's default font.",
                   RuntimeWarning)
+
+plt.rcParams.update({
+    "font.size": BASE_FONTSIZE,
+    "axes.titlesize": TITLE_FONTSIZE,
+    "axes.labelsize": BASE_FONTSIZE,
+    "xtick.labelsize": BASE_FONTSIZE,
+    "ytick.labelsize": BASE_FONTSIZE,
+})
 
 if cx is not None:
     # Tiles persist between sessions, so re-running a notebook does not refetch them.
@@ -246,8 +260,8 @@ def add_cr_boundary(ax, crs=3857) -> None:
     )
 
 
-def add_main_cities(ax, crs=3857, fontsize=9) -> None:
-    """Mark and label San José, Liberia and Limón."""
+def add_main_cities(ax, crs=3857) -> None:
+    """Mark and label San José, Liberia and Limón (size: CITY_FONTSIZE)."""
     halo = [path_effects.withStroke(linewidth=2.5, foreground="white")]
     for name, point in zip(*[get_main_cities(crs)[c] for c in ("name", "geometry")]):
         ax.plot(point.x, point.y, marker="o", markersize=5, color="#111111",
@@ -255,29 +269,27 @@ def add_main_cities(ax, crs=3857, fontsize=9) -> None:
         ax.annotate(
             name, xy=(point.x, point.y), xytext=MAIN_CITIES[name]["offset"],
             textcoords="offset points", ha=MAIN_CITIES[name]["ha"], va="center",
-            fontsize=fontsize, fontweight="bold", color="#111111",
-            path_effects=halo, zorder=CITY_Z,
+            fontsize=CITY_FONTSIZE, fontweight="bold", color="#111111",
+            alpha=CITY_LABEL_ALPHA, path_effects=halo, zorder=CITY_Z,
         )
 
 
 def add_cr_legend(ax, handles, title=None, **overrides):
     """Lower-left legend in the shared frame style.
 
-    The legend is added as an artist, so a map can carry more than one. Font sizes
-    follow the map width unless ``fontsize`` / ``title_fontsize`` are passed.
+    The legend is added as an artist, so a map can carry more than one. Font sizes are
+    fixed (LEGEND_FONTSIZE / LEGEND_TITLE_FONTSIZE); size overrides are ignored.
     """
-    width_in = ax.get_position().width * ax.figure.get_figwidth()
-    scale = min(1.0, max(LEGEND_MIN_SCALE, width_in / LEGEND_REF_WIDTH_IN))
-    scaled = {"fontsize": LEGEND_KW["fontsize"] * scale,
-              "title_fontsize": LEGEND_KW["title_fontsize"] * scale}
-    legend = ax.legend(handles=handles, title=title, **{**LEGEND_KW, **scaled, **overrides})
+    overrides.pop("fontsize", None)
+    overrides.pop("title_fontsize", None)
+    legend = ax.legend(handles=handles, title=title, **{**LEGEND_KW, **overrides})
     legend.set_zorder(LEGEND_Z)
     ax.add_artist(legend)
     return legend
 
 
-def add_panel_label(ax, label, fontsize=20) -> None:
-    ax.text(0.05, 0.95, label, transform=ax.transAxes, fontsize=fontsize,
+def add_panel_label(ax, label) -> None:
+    ax.text(0.05, 0.95, label, transform=ax.transAxes, fontsize=PANEL_LABEL_FONTSIZE,
             fontweight="bold", va="top", zorder=LEGEND_Z,
             bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
 
@@ -293,7 +305,7 @@ def style_cr_map(
     fade_outside=True,
     boundary=True,
     cities=True,
-    city_fontsize=12,
+    city_fontsize=None,          # ignored: kept so existing calls still work
     panel_label=None,
 ):
     """Apply the shared CR map style to *ax*. Call after the data layers are drawn.
@@ -311,7 +323,7 @@ def style_cr_map(
     if boundary:
         add_cr_boundary(ax, crs)
     if cities:
-        add_main_cities(ax, crs, fontsize=city_fontsize)
+        add_main_cities(ax, crs)
     # Layers added above can autoscale the axis; restore the frame.
     set_cr_extent(ax, crs)
     if panel_label:

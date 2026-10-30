@@ -263,7 +263,7 @@ inferred default. Flagged as I4.
    cache to parquet so the raster is opened once
 9  basin depth map, Serbia's 0-4 m classes
 10 per-sector impact maps: hospitals, EBAIS  (plot_service_criticality)
-11 2x2 figure: sector x origin set (§4.5)
+11 2x3 figure: origin set x sector (§4.5)
 12 save: GeoPackage layers + parquet cache (§4.4)
 13 reconciliation printout: roads in / roads valued / roads dropped, per config
 ```
@@ -275,7 +275,7 @@ origins_affected                     66,035 rows
   -> group by (scenario_id, origin_set, sector), mean of delta_h    # Serbia's A7 definition
   -> merge onto scenario_edges (378 physical roads, 1 scenario each)
   -> merge onto the dissolved physical-road geometry
-  = 378 roads x 2 origin sets x 2 sectors = 1,512 rows, long format
+  = 378 roads x 2 origin sets x 3 sectors = 2,268 rows, long format
 ```
 
 Three properties worth stating because each is a departure:
@@ -304,12 +304,12 @@ Both are derived from the same `travel_time_impact`; nothing is recomputed. The 
 
 | File | Contents |
 |---|---|
-| `intermediate_results/gpkg/travel_disruptions/flood_scenario_impacts.gpkg` | layer `road_impacts` — 1,512 rows, long format, EPSG:8908, one row per road × origin set × sector |
+| `intermediate_results/gpkg/travel_disruptions/flood_scenario_impacts.gpkg` | layer `road_impacts` — 2,268 rows, long format, EPSG:8908, one row per road × origin set × sector |
 | `intermediate_results/parquet/flood_scenarios/road_impacts.parquet` | the same table as 5d's input and the re-run cache |
 | `intermediate_results/parquet/flood_scenarios/basin_cell_depths.parquet` | D7's per-basin cell statistics — `n_cells`, `cell_min_m`, `cell_mean_m`, `cell_max_m` — cached so the raster is sampled once |
 | `figures/flood_scenario_basin_depth.png` | §3.4 |
 | `figures/flood_scenario_hospital_impact.png`, `…_ebais_impact.png` | §4.1 cell 10 |
-| `figures/flood_scenario_impact_2x2.png` | §4.5 |
+| `figures/flood_scenario_impact_2x3.png` | §4.5 |
 
 No File GDB, no Excel, no `local_accessibility/` folder (A11). Every row carries `config`,
 `origin_set`, `sector`, and 5b's provenance stamp (`scenario_rp`, `flood_threshold_m`,
@@ -328,7 +328,7 @@ Serbia's five figures map onto CR as follows:
 | `hospital_criticality.png` | `flood_scenario_hospital_impact.png` |
 | `police_criticality.png`, `fire_criticality.png`, `factory_criticality.png` | **dropped** — no CR sector (A8) |
 | `SRB_agri_criticality_{avg,nearest}_3x1.png` | **dropped** — no CR agriculture sinks (A8) |
-| `criticality_2x2.png` (4 sectors) | `flood_scenario_impact_2x2.png` — **sector × origin set**: hospitals/loc, hospitals/wp, EBAIS/loc, EBAIS/wp |
+| `criticality_2x2.png` (4 sectors) | `flood_scenario_impact_2x3.png` — **origin set × sector** (2 × 3): hospitals / EBAIS / hospitals_and_ebais, each under loc and wp |
 | — | `flood_scenario_ebais_impact.png` — new, since EBAIS has no Serbia counterpart |
 
 The 2 × 2 re-purposing is the interesting one: with four sectors gone, the same four panels become
@@ -409,3 +409,86 @@ None. All four 5b outputs are on disk and were read ✅.
 - Re-deriving the scenario partition, the exposure threshold, or the isolation penalty — all three
   are 5b's, and 5c reads them from the provenance stamp rather than restating them.
 - Any fragility, damage or duration modelling (5b §4.8's framing carries over unchanged).
+
+## Addendum — third sink set `hospitals_and_ebais`
+
+5b now also routes to a pooled hospitals-or-EBAIS sink, so 5c's `SECTORS` is `hospitals`, `ebais`, `hospitals_and_ebais`. Consequences: 5b summary is 65 × 4 × 5 sector labels = 1,300 rows (the two `*_noncolocated` labels are not carried into the road layer); the road layer is 378 × 2 × 3 = 2,268 rows; the impact figure grid is 2 × 3; the access-curve cell adds a third (green) line set. **None of these numbers has been verified** — 5b must be re-run first.
+
+## Addendum — origin-IDS-quintile analysis (§7, §8, §8b)
+
+Added 2026-10-12 as notebook sections 7, 8 and an 8b cell. **Supersedes** the header's "18 cells / 4 figures"
+and the previous addendum's "none of these numbers has been verified": the notebook is now 33 cells and
+executed end to end (`nbconvert --execute`, exit 0, no error outputs, execution counts 1–20 in order) on the
+`criticality2` kernel. The 8b cell's output was captured from running its source against cached §6 state (see
+"Verification" below), not from that full run.
+
+### What was added
+
+| Section | Question | Output |
+|---|---|---|
+| **7** | Per-road increase in travel time, computed over origins of one IDS 2023 quintile — five maps per sector | `figures/flood_scenario_{hospitals,ebais,hospitals_and_ebais}_impact_by_ids_quintile.png`; layer `road_impacts_by_quintile` in `flood_scenario_impacts.gpkg`; `parquet/flood_scenarios/road_impacts_by_quintile.parquet` |
+| **8** | Log-scale cumulative access, Q-I vs Q-V, % of own population and people, three sectors | `figures/flood_scenario_access_curves_log_ids_QI_QV_{hospitals,ebais,hospitals_and_ebais}.png` |
+| **8b** | Same, hospitals only, all scenarios on one pair of axes, Q-I purple / Q-V green | `figures/flood_scenario_access_curves_log_hospitals_ids_QI_QV_combined.png` |
+
+### Decisions (D10–D16)
+
+| # | Decision | Why |
+|---|---|---|
+| D10 | **Origin set `wp` only.** `loc` is not used for quintile work. | Every locality has `CÓDIGO = 19010101`, so `loc` `origin_id` takes **one** value and cannot be joined to a district. `wp` `origin_id` is a position in `wp_pts`, so a point-in-polygon join to `ids_2023_distrito.shp` tags every cell. (Supersedes 5b I5's suggestion that `loc` is the quintile-joinable arm: the key exists in the shapefile but is lost in 5b's `origin_id`.) |
+| D11 | **Unclassified is its own bucket**: 1,456 cells / 94,072 people = **1.83 %** (1,449 cells in no polygon, 7 in a `QUINTIL = None` district). Never folded into Q-I, never dropped. | Reported on every figure. |
+| D12 | **§7 metric = Serbia's / §2's definition restricted to one quintile**: unweighted mean of `delta_h` over every affected origin cell, **cut-off origins included at the 7 h penalty.** | Requested. Reconciles exactly with §2 (below). A road whose affected people are all cut off carries about penalty − baseline instead of being blank. The first draft used 5b's population-weighted, penalty-excluded mean with isolation-only roads in black; that was replaced. |
+| D13 | **Line width = people of the quintile affected** (delayed or cut off), decade bins 1e3 / 1e4 / 1e5; **no minimum-n cut**. | Requested: encode small-n noise instead of dropping it. The bins are a presentation choice, not derived. |
+| D14 | **§8 y variable = % of the quintile's own population**, with people as a second row; values under 1 person masked. | Q-V holds 2.4× Q-I's population, so people alone would put Q-V higher by size. |
+| D15 | **Isolated origins (7 h) are beyond the 0–3 h axis**, so §8 does not depend on the penalty value as long as it exceeds 3 h. §7 does depend on it (D12). | |
+| D16 | **8b is in people, not %**, to match the national log-scale figure of §6. | The % version is the §8 top row. |
+
+### Verified numbers ✅ (full run, 2026-10-12)
+
+**Population by origin quintile (WorldPop 1 km, 5,137,882 people):**
+Q-I 540,745 (10.52 %) · Q-II 709,946 (13.82 %) · Q-III 1,067,490 (20.78 %) · Q-IV 1,412,878 (27.50 %) ·
+Q-V 1,312,751 (25.55 %) · unclassified 94,072 (1.83 %). Buckets sum to `wp_pop`.
+
+**Reconciliations (asserted in the notebook):**
+- quintile sums vs 5b `wp_nobuf` `pop_delayed` / `pop_isolated`: max error 1.5e-11 / 7.3e-12 people;
+- origin-count-weighted recombination of the quintile means vs §2 `travel_time_impact` (`wp`): max
+  difference **8.9e-16 h**;
+- the six buckets' baseline access curves sum to the national curve of §6 for every sector.
+
+**Roads (378 exposed; 3,163 road × sector × quintile rows, all with a mean; 2,854 clear the 10 min cut;
+2,601 of those include cut-off origins):**
+
+| Roads shown (≥ 10 min) | Q-I | Q-II | Q-III | Q-IV | Q-V |
+|---|---|---|---|---|---|
+| hospitals | 342 | 261 | 162 | 41 | 14 |
+| hospitals_and_ebais | 290 | 197 | 104 | 13 | 1 |
+
+**Population ever delayed / ever cut off in ≥ 1 basin (hospitals):** Q-I 51.4 % / 22.3 % · Q-II 34.8 % /
+7.9 % · Q-III 10.7 % / 6.3 % · Q-IV 8.4 % / 1.0 % · Q-V 1.7 % / 0.1 %.
+
+**Access (people beyond the access time; % of own quintile):**
+
+| Sector | Quintile | Beyond 15 min, normal | Beyond 1 h, normal | Beyond 1 h, worst scenario |
+|---|---|---|---|---|
+| hospitals | Q-I | 502,327 (92.90 %) | 199,426 (36.88 %) | 220,094 (40.70 %) |
+| hospitals | Q-V | 145,971 (11.12 %) | 1,481 (0.11 %) | 2,289 (0.17 %) |
+| ebais = pooled | Q-I | 86,683 (16.03 %) | 4,701 (0.87 %) | 11,344 (2.10 %) |
+| ebais = pooled | Q-V | 769 (0.06 %) | 0 | 0 |
+
+### Issues
+
+| # | Issue |
+|---|---|
+| I15 | **The pooled sink *is* EBAIS on `wp`.** 10,440 rows each; on the 10,428 shared rows the scenario time is identical (100.0 %). The pooled figures add nothing over the EBAIS ones; only the hospitals figures carry a hospital signal. Cause not investigated beyond the counts (949 EBAIS vs 27 hospitals). |
+| I16 | **The 7 h penalty dominates §7's colour.** 2,601 of 2,854 mapped rows include a cut-off origin, so the 4 h+ class mostly flags "this basin cuts people off". Same caveat as §3.1; D12 keeps it deliberately. |
+| I17 | **The unweighted mean gives a remote 1 km cell the weight of a dense one**, so a road's value can be driven by a few cells; line width (D13) is the only guard. |
+| I18 | **Blank road ≠ no impact**: no origin of that quintile was affected by the road's basin scenario, or the mean was under 10 min. Stated on each figure. |
+| I19 | **Why Q-V's curves stop short in §8 / 8b (not a bug).** On a log axis zero cannot be drawn and values under 1 person are masked. Q-V's longest normal access time to a hospital is **1.38 h** (937 cells, none unreachable), so the normal curve reaches 0 people at about 1.37 h and ends there (last point: 37 people). Only **3 of 65 scenarios** touch Q-V at all; the rest sit exactly on the normal curve and are hidden by it. One scenario (`7080001420`) cuts off **819** Q-V people (7 h penalty), which is the single green line that runs to 3 h at ~800 people. Q-I's normal curve runs to 3 h because 2,233 people have a baseline time above 3 h (longest 3.49 h). |
+| I20 | **§8 reads `SECTOR_LABEL` defined in §7.3**, so §7.3 must run before §8 (hidden cell-order dependency). §7 and §8 both need `wp_pts`, `base_tt`, `thresholds` from §6. |
+| I21 | **Existing §6 bug fixed**: `CURVE_CMAPS` had no `hospitals_and_ebais` key, so §6 raised `KeyError`. Added `cm.Greens` (one line). |
+| I22 | **The notebook file was written by another process at 22:04** while the full run was in progress (execution counts starting at 13, out of order, i.e. an interactive kernel). Source was identical to the pre-run backup, so nothing was lost; flagged because an in-place run overwrites whatever is on disk. |
+
+### Verification status
+
+- **Verified:** full end-to-end execution of cells 1–30 (exit 0, no error outputs); all assertions above passed.
+- **Not part of the full run:** the 8b cell and its markdown were appended afterwards. Its output (figure + table) comes from executing the same source against §6 state cached from a separate run, and its table agrees with §8's (Q-I 502,327 / 199,426 / 220,094; Q-V 145,971 / 1,481 / 2,289). Re-running the notebook end to end will regenerate it natively.
+- **Unverified:** nothing in §7–§8b has been checked against an independent method; the checks are internal reconciliations.
